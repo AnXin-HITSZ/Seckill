@@ -1,0 +1,14 @@
+spring:
+  application:
+    name: seckill
+  data:
+    redis:
+      host: 127.0.0.1
+      port: 6379
+      password: AnXin517985!
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 0
+          max-wait: 5000ms
