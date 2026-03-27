@@ -3,9 +3,9 @@ package com.seckill.controller;
 import com.seckill.dto.LoginFormDTO;
 import com.seckill.dto.Result;
 import com.seckill.dto.UserDTO;
-import com.utils.UserHolder;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpSession;
+import com.seckill.service.IUserService;
+import com.seckill.utils.UserHolder;
+import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
 
@@ -23,24 +23,26 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/user")
 public class UserController {
 
+    @Resource
+    private IUserService userService;
+
     /**
      * 发送手机验证码
      */
     @PostMapping("/code")
-    public Result sendCode(@RequestParam("phone") String phone, HttpSession session) {
+    public Result sendCode(@RequestParam("phone") String phone) {
         // 发送短信验证码并保存验证码
-        return userService.sendCode(phone, session);
+        return userService.sendCode(phone);
     }
 
     /**
      * 登录功能
      * @param loginFormDTO 登录参数，包含手机号、验证码；或者手机号、密码
-     * @param session
-     * @return
      */
-    public Result login(@RequestBody LoginFormDTO loginFormDTO, HttpSession session) {
+    @PostMapping("/login")
+    public Result login(@RequestBody LoginFormDTO loginFormDTO) {
         // 实现登录功能
-        return userService.login(loginFormDTO, session);
+        return userService.login(loginFormDTO);
     }
 
     /**

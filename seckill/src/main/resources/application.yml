@@ -3,7 +3,7 @@ spring:
     name: seckill
   data:
     redis:
-      host: 127.0.0.1
+      host: 192.168.231.130
       port: 6379
       password: AnXin517985!
       lettuce:
@@ -12,3 +12,11 @@ spring:
           max-idle: 8
           min-idle: 0
           max-wait: 5000ms
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://127.0.0.1:3306/seckill?serverTimezone=UTC&allowPublicKeyRetrieval=true&useSSL=false
+    username: root
+    password: AnXin517985!
+logging:
+  level:
+    com.seckill: debug

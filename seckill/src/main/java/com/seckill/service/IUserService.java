@@ -1,5 +1,9 @@
 package com.seckill.service;
 
+import com.seckill.dto.LoginFormDTO;
+import com.seckill.dto.Result;
+import jakarta.servlet.http.HttpSession;
+
 /**
  * ClassName: IUserService
  * Package: com.seckill.service
@@ -10,4 +14,7 @@ package com.seckill.service;
  * @Version 1.0
  */
 public interface IUserService {
+    Result sendCode(String phone);
+
+    Result login(LoginFormDTO loginFormDTO);
 }

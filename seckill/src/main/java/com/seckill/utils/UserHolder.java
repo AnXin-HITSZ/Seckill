@@ -1,4 +1,4 @@
-package com.utils;
+package com.seckill.utils;
 
 import com.seckill.dto.UserDTO;
 
