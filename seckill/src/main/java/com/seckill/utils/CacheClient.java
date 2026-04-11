@@ -1,5 +1,6 @@
 package com.seckill.utils;
 
+import cn.hutool.core.util.BooleanUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONUtil;
 import lombok.extern.slf4j.Slf4j;
@@ -9,8 +10,7 @@ import org.springframework.stereotype.Component;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 
-import static com.seckill.utils.RedisConstants.CACHE_NULL_TTL;
-import static com.seckill.utils.RedisConstants.CACHE_SHOP_TTL;
+import static com.seckill.utils.RedisConstants.*;
 
 /**
  * ClassName: CacheClient
@@ -69,5 +69,32 @@ public class CacheClient {
         log.debug("该商铺存在（已查询数据库）");
         set(key, r, CACHE_SHOP_TTL, TimeUnit.MINUTES);
         return r;
+    }
+
+    /**
+     * 解决缓存击穿问题 - 互斥锁
+     */
+    public <R, ID> R queryWithMutex(ID id, Class<R> rType) {
+        String key = CACHE_SHOP_KEY + id;
+        // 1. 从 Redis 查询商铺缓存
+        String shopJson = stringRedisTemplate.opsForValue().get(key);
+        // 2. 判断是否存在
+        if (StrUtil.isNotBlank(shopJson)) {
+            // 2.1 存在，直接返回
+            return JSONUtil.toBean(shopJson, rType);
+        }
+        // 2.2 不存在，实现缓存重建
+
+        // 3. 返回
+
+    }
+
+    public Boolean tryLock(String key) {
+        Boolean flag = stringRedisTemplate.opsForValue().setIfAbsent(key, "1", CACHE_LOCK_TTL, TimeUnit.SECONDS);
+        return BooleanUtil.isTrue(flag);
+    }
+
+    public void unLock(String key) {
+        stringRedisTemplate.delete(key);
     }
 }
