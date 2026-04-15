@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 import java.util.concurrent.TimeUnit;
 
 import static com.seckill.utils.RedisConstants.CACHE_SHOP_KEY;
+import static com.seckill.utils.RedisConstants.LOCK_SHOP_KEY;
 
 /**
  * ClassName: ShopServiceImpl
@@ -33,14 +34,56 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
 
     @Override
     public Result queryById(Long id) {
-        Shop shop = cacheClient.queryWithPassThrough(
+        /**
+         * baseline
+         */
+//        Shop shop = shopMapper.selectById(id);
+
+        /**
+         * 解决缓存穿透问题 - 缓存空对象
+         */
+//        Shop shop = cacheClient.queryWithPassThrough(
+//                CACHE_SHOP_KEY,
+//                id,
+//                Shop.class,
+//                (shopId) -> shopMapper.selectById(shopId),
+//                CACHE_SHOP_TTL,
+//                TimeUnit.SECONDS
+//        );
+
+        /**
+         * 解决缓存击穿问题 - 互斥锁
+         */
+//        Shop shop = cacheClient.queryWithMutex(
+//                CACHE_SHOP_KEY,
+//                LOCK_SHOP_KEY,
+//                id,
+//                Shop.class,
+//                (shopId) -> shopMapper.selectById(shopId),
+//                10L,
+//                TimeUnit.SECONDS
+//        );
+
+        /**
+         * 解决缓存击穿问题 - 逻辑过期
+         */
+//        cacheClient.saveToRedis(
+//                CACHE_SHOP_KEY,
+//                id,
+//                10L,
+//                Shop.class,
+//                (shopId) -> shopMapper.selectById(shopId)
+//        );
+        Shop shop = cacheClient.queryWithLogicalExpire(
                 CACHE_SHOP_KEY,
+                LOCK_SHOP_KEY,
                 id,
                 Shop.class,
                 (shopId) -> shopMapper.selectById(shopId),
                 10L,
                 TimeUnit.SECONDS
         );
+
         if (shop == null) {
             return Result.fail("店铺不存在");
         }
