@@ -3,9 +3,8 @@ spring:
     name: seckill
   data:
     redis:
-      host: 192.168.231.130
+      host: localhost
       port: 6379
-      password: AnXin517985!
       lettuce:
         pool:
           max-active: 8

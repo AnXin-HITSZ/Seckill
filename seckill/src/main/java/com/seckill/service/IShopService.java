@@ -1,6 +1,10 @@
 package com.seckill.service;
 
+import com.baomidou.mybatisplus.extension.service.IService;
 import com.seckill.dto.Result;
+import com.seckill.entity.Shop;
+
+import java.util.List;
 
 /**
  * ClassName: IShopService
@@ -11,6 +15,8 @@ import com.seckill.dto.Result;
  * @Create 2026/3/27 20:47
  * @Version 1.0
  */
-public interface IShopService {
+public interface IShopService extends IService<Shop> {
     Result queryById(Long id);
+
+    Result update(Shop shop);
 }

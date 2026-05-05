@@ -1,11 +1,13 @@
 package com.seckill.utils;
 
+import cn.hutool.bloomfilter.BitMapBloomFilter;
 import cn.hutool.core.util.BooleanUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
 import com.seckill.entity.Shop;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
@@ -30,9 +32,12 @@ import static com.seckill.utils.RedisConstants.*;
 @Component
 public class CacheClient {
 
+    private BitMapBloomFilter bloomFilter;
+
     private final StringRedisTemplate stringRedisTemplate;
 
-    public CacheClient(StringRedisTemplate stringRedisTemplate) {
+    public CacheClient(BitMapBloomFilter bloomFilter, StringRedisTemplate stringRedisTemplate) {
+        this.bloomFilter = bloomFilter;
         this.stringRedisTemplate = stringRedisTemplate;
     }
 
@@ -59,15 +64,20 @@ public class CacheClient {
             TimeUnit unit
     ) {
         String key = keyPrefix + id.toString();
-        // 1. 从 Redis 查询商铺缓存
+        // 1. 从布隆过滤器查询商铺缓存
+        if(!bloomFilter.contains(id.toString())) {
+            log.debug("该商铺不存在（来自布隆过滤器）");
+            return null;
+        }
+        // 2. 从 Redis 查询商铺缓存
         String json = stringRedisTemplate.opsForValue().get(key);
-        // 2. 判断是否存在
+        // 3. 判断是否存在
         if (StrUtil.isNotEmpty(json)) {
-            // 2.1 存在，返回
+            // 3.1 存在，返回
             log.debug("该商铺存在（未查询数据库）：{}", json);
             return JSONUtil.toBean(json, rType);
         }
-        // 2.2 不存在
+        // 3.2 不存在
         if (json != null) {
             log.debug("该商铺不存在（未查询数据库）");
             return null;
