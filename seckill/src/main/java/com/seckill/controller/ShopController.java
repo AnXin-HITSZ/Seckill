@@ -44,11 +44,19 @@ public class ShopController {
     }
 
     /**
-     * 查询商铺信息
+     * 按ID查询商铺信息
      */
     @GetMapping("/{id}")
     public Result queryShopById(@PathVariable("id") Long id) {
         return shopService.queryById(id);
+    }
+
+    /**
+     * 按名称查询商铺信息
+     */
+    @GetMapping("/name/{name}")
+    public Result queryShopByName(@PathVariable("name") String name) {
+        return shopService.queryByName(name);
     }
 
     /**

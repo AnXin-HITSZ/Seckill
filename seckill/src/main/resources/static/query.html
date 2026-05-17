@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>订单查询系统 - 慢查询测试</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, system-ui, sans-serif; background: #f5f6fa; color: #333; padding: 20px; }
+.container { max-width: 1200px; margin: 0 auto; display: grid; grid-template-columns: 1fr; gap: 16px; }
+h1 { font-size: 20px; margin-bottom: 4px; }
+.subtitle { color: #888; font-size: 13px; margin-bottom: 16px; }
+
+/* Tabs */
+.tabs { display: flex; gap: 2px; background: #e4e7ed; border-radius: 8px; padding: 3px; }
+.tab-btn { flex: 1; padding: 10px 16px; border: none; background: transparent; border-radius: 6px; cursor: pointer; font-size: 14px; color: #666; transition: all .2s; }
+.tab-btn:hover { color: #333; }
+.tab-btn.active { background: #fff; color: #409eff; font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,.1); }
+
+/* Panels */
+.panel { display: none; background: #fff; border-radius: 8px; padding: 20px; box-shadow: 0 1px 4px rgba(0,0,0,.06); }
+.panel.active { display: block; }
+.panel h3 { font-size: 15px; margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid #eee; }
+
+/* Form */
+.form-row { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.form-group { display: flex; flex-direction: column; gap: 4px; }
+.form-group label { font-size: 12px; color: #888; }
+.form-group input { padding: 7px 10px; border: 1px solid #dcdfe6; border-radius: 4px; font-size: 13px; outline: none; width: 140px; }
+.form-group input:focus { border-color: #409eff; }
+.form-group input.full-width { width: auto; min-width: 200px; flex: 1; }
+
+.btn { padding: 8px 20px; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; transition: all .2s; }
+.btn-primary { background: #409eff; color: #fff; }
+.btn-primary:hover { background: #337ecc; }
+.btn-primary:disabled { background: #a0cfff; cursor: not-allowed; }
+.btn-sm { padding: 4px 12px; font-size: 12px; }
+.btn-warning { background: #e6a23c; color: #fff; }
+.btn-warning:hover { background: #cf9236; }
+.btn-danger { background: #f56c6c; color: #fff; }
+.btn-danger:hover { background: #d95c5c; }
+
+/* Result */
+.result-area { background: #f8f9fb; border-radius: 6px; padding: 14px; margin-top: 14px; max-height: 360px; overflow: auto; }
+.result-area pre { font-family: 'Courier New', monospace; font-size: 12px; line-height: 1.6; white-space: pre-wrap; word-break: break-all; }
+.result-area .meta { font-size: 12px; color: #888; margin-bottom: 8px; }
+.result-area .meta .label { display: inline-block; min-width: 60px; }
+.result-area .meta .slow { color: #f56c6c; font-weight: 600; }
+.result-area .meta .fast { color: #67c23a; }
+.result-area table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.result-area th, .result-area td { padding: 6px 8px; text-align: left; border-bottom: 1px solid #eee; }
+.result-area th { background: #f0f2f5; position: sticky; top: 0; }
+
+/* Log panel */
+.log-panel { background: #fff; border-radius: 8px; padding: 16px 20px; box-shadow: 0 1px 4px rgba(0,0,0,.06); }
+.log-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.log-header h3 { font-size: 14px; }
+.log-list { max-height: 200px; overflow-y: auto; font-size: 12px; }
+.log-item { padding: 6px 8px; border-bottom: 1px solid #f0f2f5; display: flex; gap: 12px; align-items: baseline; }
+.log-item:last-child { border-bottom: none; }
+.log-item .time { color: #aaa; min-width: 56px; }
+.log-item .method { color: #409eff; min-width: 160px; font-family: monospace; }
+.log-item .duration { min-width: 70px; text-align: right; font-weight: 600; }
+.log-item.slow .duration { color: #f56c6c; }
+.log-item.fast .duration { color: #67c23a; }
+.log-item .args { color: #999; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.empty-log { color: #bbb; font-size: 12px; text-align: center; padding: 20px; }
+
+/* Status badges */
+.badge { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 11px; }
+.badge-pending { background: #fdf6ec; color: #e6a23c; }
+.badge-paid { background: #e6f7ff; color: #409eff; }
+.badge-shipped { background: #f0f9eb; color: #67c23a; }
+.badge-completed { background: #f0f9eb; color: #67c23a; }
+.badge-cancelled { background: #fef0f0; color: #f56c6c; }
+.badge-refunded { background: #f5f5f5; color: #999; }
+
+.loading { display: inline-block; width: 14px; height: 14px; border: 2px solid #ddd; border-top-color: #409eff; border-radius: 50%; animation: spin .8s linear infinite; vertical-align: middle; margin-right: 6px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <div>
+    <h1>订单查询系统 - 慢查询测试平台</h1>
+    <div class="subtitle">4 个查询接口 &middot; AOP 自动监控 &middot; 实时慢查询告警</div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="tab-user">用户订单查询</button>
+    <button class="tab-btn" data-tab="tab-search">订单搜索</button>
+    <button class="tab-btn" data-tab="tab-stats">品类销售统计</button>
+    <button class="tab-btn" data-tab="tab-filter">组合条件筛选</button>
+  </div>
+
+  <!-- Panel 1: 用户订单查询 -->
+  <div class="panel active" id="tab-user">
+    <h3>用户订单查询 POST /api/orders/user</h3>
+    <div class="form-row">
+      <div class="form-group"><label>用户 ID</label><input id="u-userId" value="1234"></div>
+      <div class="form-group"><label>状态筛选（留空=全部）</label><input id="u-status" placeholder="0~5"></div>
+      <div class="form-group"><label>页码</label><input id="u-pageNum" value="1" style="width:80px"></div>
+      <div class="form-group"><label>每页条数</label><input id="u-pageSize" value="10" style="width:80px"></div>
+      <div class="form-group" style="justify-content:flex-end">
+        <button class="btn btn-primary" onclick="queryUser()" id="u-btn">查询</button>
+      </div>
+    </div>
+    <div class="result-area" id="u-result"><pre>点击"查询"发起请求</pre></div>
+  </div>
+
+  <!-- Panel 2: 订单搜索（游标分页） -->
+  <div class="panel" id="tab-search">
+    <h3>订单搜索 POST /api/orders/search（游标分页）</h3>
+    <div class="form-row">
+      <div class="form-group"><label>开始日期</label><input id="s-startTime" value="2025-01-01"></div>
+      <div class="form-group"><label>结束日期</label><input id="s-endTime" value="2026-12-31"></div>
+      <div class="form-group"><label>最低金额(分)</label><input id="s-minAmount" value="500"></div>
+      <div class="form-group"><label>商品关键词</label><input id="s-productName" value="蓝牙" class="full-width"></div>
+      <div class="form-group"><label>每页</label><input id="s-pageSize" value="10" style="width:80px"></div>
+      <div class="form-group" style="justify-content:flex-end">
+        <button class="btn btn-primary" onclick="searchOrders()" id="s-btn">搜索</button>
+        <button class="btn btn-sm btn-primary" onclick="nextSearch()" id="s-next" style="margin-left:8px;display:none">下一页 →</button>
+      </div>
+    </div>
+    <div class="result-area" id="s-result"><pre>点击"搜索"发起请求</pre></div>
+  </div>
+
+  <!-- Panel 3: 品类统计 -->
+  <div class="panel" id="tab-stats">
+    <h3>品类销售统计 GET /api/orders/category-stats</h3>
+    <div class="form-row">
+      <div class="form-group" style="justify-content:flex-end">
+        <button class="btn btn-primary" onclick="getCategoryStats()" id="c-btn">查询统计</button>
+      </div>
+    </div>
+    <div class="result-area" id="c-result"><pre>点击"查询统计"发起请求</pre></div>
+  </div>
+
+  <!-- Panel 4: 组合筛选（游标分页） -->
+  <div class="panel" id="tab-filter">
+    <h3>组合条件筛选 POST /api/orders/filter（游标分页）</h3>
+    <div class="form-row">
+      <div class="form-group"><label>用户 ID</label><input id="f-userId" value="1234"></div>
+      <div class="form-group"><label>状态列表（逗号分隔）</label><input id="f-statusList" value="1,2,3"></div>
+      <div class="form-group"><label>品类ID列表（逗号分隔）</label><input id="f-categoryIds" value="1,10" class="full-width"></div>
+      <div class="form-group"><label>每页</label><input id="f-pageSize" value="10" style="width:80px"></div>
+      <div class="form-group" style="justify-content:flex-end">
+        <button class="btn btn-primary" onclick="filterOrders()" id="f-btn">筛选</button>
+        <button class="btn btn-sm btn-primary" onclick="nextFilter()" id="f-next" style="margin-left:8px;display:none">下一页 →</button>
+      </div>
+    </div>
+    <div class="result-area" id="f-result"><pre>点击"筛选"发起请求</pre></div>
+  </div>
+
+  <!-- Log Panel -->
+  <div class="log-panel">
+    <div class="log-header">
+      <h3>实时查询监控日志</h3>
+      <div>
+        <button class="btn btn-sm btn-warning" onclick="refreshLogs()">刷新</button>
+        <button class="btn btn-sm btn-danger" onclick="clearLogs()">清空</button>
+      </div>
+    </div>
+    <div class="log-list" id="log-list">
+      <div class="empty-log">暂无查询记录，发起查询后将实时显示</div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ========== Tab 切换 ==========
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById(btn.dataset.tab).classList.add('active');
+  });
+});
+
+// ========== 状态标签 ==========
+const STATUS_MAP = { 0:'待支付',1:'已支付',2:'已发货',3:'已完成',4:'已取消',5:'已退款' };
+const STATUS_CLS = { 0:'badge-pending',1:'badge-paid',2:'badge-shipped',3:'badge-completed',4:'badge-cancelled',5:'badge-refunded' };
+
+function statusBadge(s) {
+  const text = STATUS_MAP[s] || s;
+  const cls = STATUS_CLS[s] || '';
+  return `<span class="badge ${cls}">${text}</span>`;
+}
+
+// ========== 客户端计时请求 ==========
+async function timedFetch(url, options) {
+  const start = performance.now();
+  const resp = await fetch(url, options);
+  const data = await resp.json();
+  const elapsed = Math.round(performance.now() - start);
+  return { data, elapsed };
+}
+
+function renderMeta(elapsed, slowThreshold) {
+  const isSlow = elapsed >= slowThreshold;
+  return `<div class="meta">` +
+    `<span class="label">客户端耗时:</span> ` +
+    `<span class="${isSlow ? 'slow' : 'fast'}">${elapsed}ms</span>` +
+    (isSlow ? ` <span class="slow">! 超过阈值 ${slowThreshold}ms</span>` : ` <span class="fast">v 正常</span>`) +
+    `</div>`;
+}
+
+// ========== 游标分页全局状态 ==========
+let searchCursor = null;
+let searchLastId = null;
+let filterCursor = null;
+let filterLastId = null;
+
+// ========== 1. 用户订单查询（传统分页） ==========
+async function queryUser() {
+  const btn = document.getElementById('u-btn');
+  btn.disabled = true; btn.innerHTML = '<span class="loading"></span>查询中...';
+  const el = document.getElementById('u-result');
+  try {
+    const userId = document.getElementById('u-userId').value;
+    const status = document.getElementById('u-status').value;
+    const pageNum = document.getElementById('u-pageNum').value || 1;
+    const pageSize = document.getElementById('u-pageSize').value || 10;
+    let url = `/api/orders/user?userId=${userId}&pageNum=${pageNum}&pageSize=${pageSize}`;
+    if (status) url += `&status=${status}`;
+
+    const { data, elapsed } = await timedFetch(url, { method: 'POST' });
+    const slowThreshold = 1000;
+    let html = renderMeta(elapsed, slowThreshold);
+
+    if (data.success) {
+      const list = data.data || [];
+      const total = data.total || 0;
+      html += `<div class="meta">共 ${total} 条结果</div>`;
+      if (list.length > 0) {
+        html += `<table><thead><tr>
+          <th>ID</th><th>用户ID</th><th>状态</th><th>金额(元)</th><th>品类</th><th>创建时间</th>
+        </tr></thead><tbody>`;
+        list.forEach(o => {
+          html += `<tr>
+            <td>${o.id}</td><td>${o.userId}</td>
+            <td>${statusBadge(o.status)}</td>
+            <td>${(o.totalAmount/100).toFixed(2)}</td>
+            <td>${o.categoryName||''}</td>
+            <td>${o.createTime||''}</td>
+          </tr>`;
+        });
+        html += `</tbody></table>`;
+      } else {
+        html += `<pre>无数据</pre>`;
+      }
+    } else {
+      html += `<pre style="color:#f56c6c">请求失败: ${data.errorMsg}</pre>`;
+    }
+    el.innerHTML = html;
+  } catch(e) {
+    el.innerHTML = `<pre style="color:#f56c6c">请求异常: ${e.message}</pre>`;
+  } finally {
+    btn.disabled = false; btn.textContent = '查询';
+  }
+}
+
+// ========== 2. 订单搜索（游标分页） ==========
+async function searchOrders() {
+  searchCursor = null;
+  searchLastId = null;
+  document.getElementById('s-next').style.display = 'none';
+  await doSearch();
+}
+
+async function nextSearch() {
+  await doSearch();
+}
+
+async function doSearch() {
+  const btn = document.getElementById('s-btn');
+  const nextBtn = document.getElementById('s-next');
+  btn.disabled = true; btn.innerHTML = '<span class="loading"></span>搜索中...';
+  const el = document.getElementById('s-result');
+  try {
+    const body = {
+      startTime: document.getElementById('s-startTime').value,
+      endTime: document.getElementById('s-endTime').value,
+      minAmount: parseInt(document.getElementById('s-minAmount').value) || null,
+      productName: document.getElementById('s-productName').value || null,
+      cursor: searchCursor,
+      lastId: searchLastId,
+      pageSize: parseInt(document.getElementById('s-pageSize').value) || 10
+    };
+    if (body.minAmount === null) delete body.minAmount;
+    if (!body.productName) delete body.productName;
+
+    const { data, elapsed } = await timedFetch('/api/orders/search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const slowThreshold = 1000;
+    let html = renderMeta(elapsed, slowThreshold);
+
+    if (data.success) {
+      const list = data.data || [];
+      if (list.length > 0) {
+        html += `<div class="meta">返回 ${list.length} 条</div>`;
+        html += `<table><thead><tr>
+          <th>ID</th><th>用户ID</th><th>状态</th><th>金额(元)</th><th>品类</th><th>创建时间</th>
+        </tr></thead><tbody>`;
+        list.forEach(o => {
+          html += `<tr>
+            <td>${o.id}</td><td>${o.userId}</td>
+            <td>${statusBadge(o.status)}</td>
+            <td>${(o.totalAmount/100).toFixed(2)}</td>
+            <td>${o.categoryName||''}</td>
+            <td>${o.createTime||''}</td>
+          </tr>`;
+        });
+        html += `</tbody></table>`;
+        searchCursor = data.cursor;
+        searchLastId = data.lastId;
+        nextBtn.style.display = data.cursor ? 'inline-block' : 'none';
+      } else {
+        html += `<pre>无更多数据</pre>`;
+        nextBtn.style.display = 'none';
+      }
+    } else {
+      html += `<pre style="color:#f56c6c">请求失败: ${data.errorMsg}</pre>`;
+    }
+    el.innerHTML = html;
+  } catch(e) {
+    el.innerHTML = `<pre style="color:#f56c6c">请求异常: ${e.message}</pre>`;
+  } finally {
+    btn.disabled = false; btn.textContent = '搜索';
+  }
+}
+
+// ========== 3. 品类统计 ==========
+async function getCategoryStats() {
+  const btn = document.getElementById('c-btn');
+  btn.disabled = true; btn.innerHTML = '<span class="loading"></span>查询中...';
+  const el = document.getElementById('c-result');
+  try {
+    const { data, elapsed } = await timedFetch('/api/orders/category-stats', { method: 'GET' });
+    const slowThreshold = 1000;
+    let html = renderMeta(elapsed, slowThreshold);
+
+    if (data.success) {
+      const list = data.data || [];
+      if (list.length > 0) {
+        html += `<table><thead><tr>
+          <th>品类ID</th><th>品类名称</th><th>订单状态</th><th>订单数</th><th>总金额(元)</th>
+        </tr></thead><tbody>`;
+        list.forEach(o => {
+          html += `<tr>
+            <td>${o.categoryId}</td><td>${o.categoryName||''}</td>
+            <td>${statusBadge(o.status)}</td>
+            <td>${o.orderCount}</td>
+            <td>${(o.totalAmount/100).toFixed(2)}</td>
+          </tr>`;
+        });
+        html += `</tbody></table>`;
+      } else {
+        html += `<pre>无数据</pre>`;
+      }
+    } else {
+      html += `<pre style="color:#f56c6c">请求失败: ${data.errorMsg}</pre>`;
+    }
+    el.innerHTML = html;
+  } catch(e) {
+    el.innerHTML = `<pre style="color:#f56c6c">请求异常: ${e.message}</pre>`;
+  } finally {
+    btn.disabled = false; btn.textContent = '查询统计';
+  }
+}
+
+// ========== 4. 组合筛选（游标分页） ==========
+async function filterOrders() {
+  filterCursor = null;
+  filterLastId = null;
+  document.getElementById('f-next').style.display = 'none';
+  await doFilter();
+}
+
+async function nextFilter() {
+  await doFilter();
+}
+
+async function doFilter() {
+  const btn = document.getElementById('f-btn');
+  const nextBtn = document.getElementById('f-next');
+  btn.disabled = true; btn.innerHTML = '<span class="loading"></span>筛选中...';
+  const el = document.getElementById('f-result');
+  try {
+    const statusList = document.getElementById('f-statusList').value
+      .split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n));
+    const categoryIds = document.getElementById('f-categoryIds').value
+      .split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n));
+    const body = {
+      userId: parseInt(document.getElementById('f-userId').value) || null,
+      statusList: statusList.length > 0 ? statusList : null,
+      categoryIds: categoryIds.length > 0 ? categoryIds : null,
+      cursor: filterCursor,
+      lastId: filterLastId,
+      pageSize: parseInt(document.getElementById('f-pageSize').value) || 10
+    };
+    if (!body.userId) delete body.userId;
+    if (!body.statusList) delete body.statusList;
+    if (!body.categoryIds) delete body.categoryIds;
+
+    const { data, elapsed } = await timedFetch('/api/orders/filter', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const slowThreshold = 1000;
+    let html = renderMeta(elapsed, slowThreshold);
+
+    if (data.success) {
+      const list = data.data || [];
+      if (list.length > 0) {
+        html += `<div class="meta">返回 ${list.length} 条</div>`;
+        html += `<table><thead><tr>
+          <th>ID</th><th>用户ID</th><th>状态</th><th>金额(元)</th><th>品类</th><th>创建时间</th>
+        </tr></thead><tbody>`;
+        list.forEach(o => {
+          html += `<tr>
+            <td>${o.id}</td><td>${o.userId}</td>
+            <td>${statusBadge(o.status)}</td>
+            <td>${(o.totalAmount/100).toFixed(2)}</td>
+            <td>${o.categoryName||''}</td>
+            <td>${o.createTime||''}</td>
+          </tr>`;
+        });
+        html += `</tbody></table>`;
+        filterCursor = data.cursor;
+        filterLastId = data.lastId;
+        nextBtn.style.display = data.cursor ? 'inline-block' : 'none';
+      } else {
+        html += `<pre>无更多数据</pre>`;
+        nextBtn.style.display = 'none';
+      }
+    } else {
+      html += `<pre style="color:#f56c6c">请求失败: ${data.errorMsg}</pre>`;
+    }
+    el.innerHTML = html;
+  } catch(e) {
+    el.innerHTML = `<pre style="color:#f56c6c">请求异常: ${e.message}</pre>`;
+  } finally {
+    btn.disabled = false; btn.textContent = '筛选';
+  }
+}
+
+// ========== 日志监控 ==========
+async function refreshLogs() {
+  const el = document.getElementById('log-list');
+  try {
+    const resp = await fetch('/api/logs/queries');
+    const data = await resp.json();
+    if (!data.success || !data.data || data.data.length === 0) {
+      el.innerHTML = '<div class="empty-log">暂无查询记录</div>';
+      return;
+    }
+    let html = '';
+    data.data.forEach(r => {
+      const isSlow = r.durationMs >= r.thresholdMs;
+      html += `<div class="log-item ${isSlow ? 'slow' : 'fast'}">`;
+      html += `<span class="time">${r.formattedTime||''}</span>`;
+      html += `<span class="method">${r.methodName||''}</span>`;
+      const dur = isSlow ? `! ${r.durationMs}ms` : `${r.durationMs}ms`;
+      html += `<span class="duration">${dur}</span>`;
+      html += `<span class="args" title="${escapeHtml(r.args||'')}">${escapeHtml((r.args||'').substring(0,80))}</span>`;
+      html += `</div>`;
+    });
+    el.innerHTML = html;
+    el.scrollTop = el.scrollHeight;
+  } catch(e) {
+    // silent
+  }
+}
+
+function escapeHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+async function clearLogs() {
+  await fetch('/api/logs/queries', { method: 'DELETE' });
+  refreshLogs();
+}
+
+// Auto refresh logs every 3s
+setInterval(refreshLogs, 3000);
+refreshLogs();
+</script>
+</body>
+</html>

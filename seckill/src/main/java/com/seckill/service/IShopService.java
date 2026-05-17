@@ -18,5 +18,7 @@ import java.util.List;
 public interface IShopService extends IService<Shop> {
     Result queryById(Long id);
 
+    Result queryByName(String name);
+
     Result update(Shop shop);
 }

@@ -63,6 +63,29 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
     }
 
     @Override
+    public boolean save(Shop shop) {
+        boolean saved = super.save(shop);
+        if (saved) {
+            bloomFilter.add(String.valueOf(shop.getId()));
+        }
+        return saved;
+    }
+
+    @Override
+    public Result queryByName(String name) {
+        List<Shop> shops = query()
+                .like("name", name)
+                .list();
+        if (shops == null || shops.isEmpty()) {
+            return Result.fail("店铺不存在");
+        }
+        if (shops.size() == 1) {
+            return Result.ok(shops.get(0));
+        }
+        return Result.ok(shops);
+    }
+
+    @Override
     public Result queryById(Long id) {
         /**
          * baseline

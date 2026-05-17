@@ -23,7 +23,7 @@ public class RedissonConfig {
         // 配置类
         Config config = new Config();
         // 添加 Redis 地址，这里添加了单点的地址，也可以使用 config.useClusterServers() 添加集群地址
-        config.useSingleServer().setAddress("redis://localhost:6379");
+        config.useSingleServer().setAddress("redis://localhost:6380");
         // 创建客户端
         return Redisson.create(config);
     }

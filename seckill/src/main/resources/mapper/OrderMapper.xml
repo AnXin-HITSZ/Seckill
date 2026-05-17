@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.seckill.mapper.OrderMapper">
+
+    <!-- ======================== 游标分页 ======================== -->
+
+    <!-- Search orders by time range + amount + product keyword -->
+    <select id="searchOrders" resultType="com.seckill.entity.Order">
+        SELECT <if test="productName != null and productName != ''">DISTINCT</if>
+               o.id, o.user_id, o.`status`, o.total_amount,
+               o.category_id, o.category_name, o.create_time, o.update_time
+        FROM tb_order o
+        <if test="productName != null and productName != ''">
+            INNER JOIN tb_order_item oi ON o.id = oi.order_id
+        </if>
+        <where>
+            <if test="startTime != null">
+                AND o.create_time &gt;= #{startTime}
+            </if>
+            <if test="endTime != null">
+                AND o.create_time &lt;= #{endTime}
+            </if>
+            <if test="minAmount != null">
+                AND o.total_amount &gt;= #{minAmount}
+            </if>
+            <if test="productName != null and productName != ''">
+                AND MATCH(oi.product_name) AGAINST(#{productName} IN BOOLEAN MODE)
+            </if>
+            <if test="cursor != null">
+                AND (o.create_time &lt; #{cursor}
+                     OR (o.create_time = #{cursor} AND o.id &lt; #{lastId}))
+            </if>
+        </where>
+        ORDER BY o.create_time DESC, o.id DESC
+        LIMIT #{pageSize}
+    </select>
+
+    <!-- Combined filter: user + multi-status + multi-category -->
+    <select id="filterOrders" resultType="com.seckill.entity.Order">
+        SELECT id, user_id, `status`, total_amount,
+               category_id, category_name, create_time, update_time
+        FROM tb_order
+        <where>
+            <if test="userId != null">
+                AND user_id = #{userId}
+            </if>
+            <if test="statusList != null and statusList.size() > 0">
+                AND `status` IN
+                <foreach collection="statusList" item="s" open="(" separator="," close=")">
+                    #{s}
+                </foreach>
+            </if>
+            <if test="categoryIds != null and categoryIds.size() > 0">
+                AND category_id IN
+                <foreach collection="categoryIds" item="c" open="(" separator="," close=")">
+                    #{c}
+                </foreach>
+            </if>
+            <if test="cursor != null">
+                AND (create_time &lt; #{cursor}
+                     OR (create_time = #{cursor} AND id &lt; #{lastId}))
+            </if>
+        </where>
+        ORDER BY create_time DESC, id DESC
+        LIMIT #{pageSize}
+    </select>
+
+    <!-- ======================== 传统分页（用户订单） ======================== -->
+
+    <select id="queryUserOrdersWithPage" resultType="com.seckill.entity.Order">
+        SELECT id, user_id, `status`, total_amount,
+               category_id, category_name, create_time, update_time
+        FROM tb_order
+        WHERE user_id = #{userId}
+        <if test="status != null">
+            AND `status` = #{status}
+        </if>
+        ORDER BY create_time DESC
+        LIMIT #{offset}, #{pageSize}
+    </select>
+
+    <select id="countUserOrders" resultType="long">
+        SELECT COUNT(*)
+        FROM tb_order
+        WHERE user_id = #{userId}
+        <if test="status != null">
+            AND `status` = #{status}
+        </if>
+    </select>
+
+    <!-- ======================== 统计查询 ======================== -->
+
+    <select id="selectCategoryStats" resultType="com.seckill.dto.CategoryStatsVO">
+        SELECT category_id, category_name, `status`,
+               COUNT(*) AS order_count,
+               SUM(total_amount) AS total_amount
+        FROM tb_order
+        GROUP BY category_id, category_name, `status`
+        ORDER BY category_id, `status`
+    </select>
+
+</mapper>
